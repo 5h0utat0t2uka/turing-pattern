@@ -1,7 +1,8 @@
 # turing-pattern
 
 Gray–Scott反応拡散モデルでチューリングパターンを生成し、[chafa](https://hpjansson.org/chafa/) でターミナルに表示するCLI  
-模様の種類と配色は毎回ランダムで、画像ファイルは保存しない
+
+![demo](./img/ss.png)  
 
 ## 使い方
 ```sh
