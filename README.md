@@ -2,7 +2,8 @@
 
 Gray–Scott反応拡散モデルでチューリングパターンを生成し、[chafa](https://hpjansson.org/chafa/) でターミナルに表示するCLI  
 
-![demo](./img/ss.png)  
+![demo](./img/ss1.png)  
+![demo](./img/ss2.png)  
 
 ## 使い方
 ```sh
