@@ -1,5 +1,6 @@
 //! Gray–Scott reaction-diffusion patterns in random colors, shown with chafa.
 
+pub mod animate;
 pub mod display;
 pub mod id;
 pub mod render;

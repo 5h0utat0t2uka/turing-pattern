@@ -22,15 +22,22 @@ pub struct ImageSpec<'a> {
     pub seed: u64,
     pub size: usize,
     pub steps: u32,
+    /// `(frames, fps)` for an animated GIF; `None` for a still PNG.
+    pub animation: Option<(u32, u32)>,
 }
 
 impl ImageSpec<'_> {
     /// Canonical text form, hashed for the id and stored in saved PNGs.
     pub fn describe(&self) -> String {
-        format!(
+        let mut text = format!(
             "turing-pattern v{GENERATOR_VERSION} pattern={} seed={} size={} steps={}",
             self.pattern, self.seed, self.size, self.steps
-        )
+        );
+        // Appended only for animations, so still images keep their ids.
+        if let Some((frames, fps)) = self.animation {
+            text += &format!(" frames={frames} fps={fps}");
+        }
+        text
     }
 
     pub fn id(&self) -> String {
@@ -52,6 +59,7 @@ mod tests {
             seed,
             size,
             steps,
+            animation: None,
         }
     }
 
@@ -71,6 +79,34 @@ mod tests {
     }
 
     const PINNED: &str = "7f485ec22c6b";
+
+    #[test]
+    fn animations_get_their_own_ids() {
+        let still = spec("maze", 7, 24, 30);
+        let animated = |frames, fps| ImageSpec {
+            animation: Some((frames, fps)),
+            ..spec("maze", 7, 24, 30)
+        };
+        assert_eq!(
+            animated(120, 24).describe(),
+            "turing-pattern v2 pattern=maze seed=7 size=24 steps=30 frames=120 fps=24"
+        );
+        // Independently: `printf '<the line above>' | shasum -a 256`, first 12 digits.
+        assert_eq!(animated(120, 24).id(), PINNED_ANIMATION);
+        let ids = [
+            still.id(),
+            animated(120, 24).id(),
+            animated(121, 24).id(),
+            animated(120, 25).id(),
+        ];
+        for (i, a) in ids.iter().enumerate() {
+            for b in &ids[i + 1..] {
+                assert_ne!(a, b);
+            }
+        }
+    }
+
+    const PINNED_ANIMATION: &str = "75e7cf975a48";
 
     #[test]
     fn every_input_changes_the_id() {

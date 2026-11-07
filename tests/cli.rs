@@ -222,6 +222,7 @@ fn saved_name(pattern: &str, seed: u64, size: usize, steps: u32) -> String {
         seed,
         size,
         steps,
+        animation: None,
     }
     .id();
     format!("turing-{id}.png")
@@ -380,6 +381,123 @@ fn unusable_save_directory_is_reported_before_simulating() {
 }
 
 #[test]
+fn animation_is_sent_to_chafa_and_saved_as_gif() {
+    let (bin, received) = fake_chafa();
+    let out_dir = scratch("animated");
+    let dir = out_dir.to_str().unwrap();
+    let args = [
+        "--animate",
+        "--frames",
+        "6",
+        "--fps",
+        "10",
+        "--size",
+        "20",
+        "--steps",
+        "40",
+        "--seed",
+        "7",
+        "--pattern",
+        "maze",
+        "--save",
+        dir,
+    ];
+    let out = run(&args, &bin, &bin);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let gif = fs::read(&received).unwrap();
+    assert_eq!(&gif[..6], b"GIF89a");
+
+    // The id includes the frame count and rate, and the file is a .gif.
+    let id = ImageSpec {
+        pattern: "maze",
+        seed: 7,
+        size: 20,
+        steps: 40,
+        animation: Some((6, 10)),
+    }
+    .id();
+    let name = format!("turing-{id}.gif");
+    assert_eq!(dir_names(&out_dir), std::slice::from_ref(&name));
+    assert_eq!(fs::read(out_dir.join(&name)).unwrap(), gif);
+    let log = String::from_utf8(out.stderr).unwrap();
+    assert!(log.contains(&format!("id={id}")), "{log}");
+    let description =
+        format!("turing-pattern v2 pattern=maze seed=7 size=20 steps=40 frames=6 fps=10 id={id}");
+    assert!(
+        gif.windows(description.len())
+            .any(|w| w == description.as_bytes())
+    );
+
+    // A still image of the same inputs keeps its own id and name.
+    let still = [
+        "--size",
+        "20",
+        "--steps",
+        "40",
+        "--seed",
+        "7",
+        "--pattern",
+        "maze",
+        "--save",
+        dir,
+    ];
+    run(&still, &bin, &bin);
+    let mut expected = vec![name, saved_name("maze", 7, 20, 40)];
+    expected.sort();
+    assert_eq!(dir_names(&out_dir), expected);
+}
+
+#[test]
+fn all_patterns_can_be_animated() {
+    let (bin, received) = fake_chafa();
+    let out = run(
+        &[
+            "--all",
+            "--animate",
+            "--frames",
+            "3",
+            "--size",
+            "16",
+            "--steps",
+            "10",
+        ],
+        &bin,
+        &bin,
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    let gif = fs::read(&received).unwrap();
+    // Canvas: 4 tiles of 16 with gaps of 2, by 2 rows.
+    assert_eq!(
+        &gif[6..10],
+        [(4 * 16 + 3 * 2) as u8, 0, (2 * 16 + 2) as u8, 0]
+    );
+}
+
+#[test]
+fn too_many_frames_for_the_steps_is_reported() {
+    let (bin, _) = fake_chafa();
+    let out = run(
+        &["--animate", "--frames", "10", "--steps", "5", "--size", "8"],
+        &bin,
+        &bin,
+    );
+    assert_eq!(out.status.code(), Some(1));
+    assert!(
+        String::from_utf8(out.stderr)
+            .unwrap()
+            .contains("needs at least 9 --steps")
+    );
+}
+
+#[test]
 fn invalid_arguments_are_rejected() {
     let (bin, _) = fake_chafa();
     let cases: &[&[&str]] = &[
@@ -396,6 +514,11 @@ fn invalid_arguments_are_rejected() {
         &["--text", "a", "--seed", "1"],
         &["--text"],
         &["--all", "--pattern", "worms"],
+        &["--frames", "10"],
+        &["--fps", "10"],
+        &["--animate", "--frames", "1"],
+        &["--animate", "--fps", "0"],
+        &["--animate", "--fps", "51"],
     ];
     for args in cases {
         let out = run(args, &bin, &bin);

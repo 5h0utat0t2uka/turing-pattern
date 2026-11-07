@@ -8,9 +8,9 @@ use std::fs;
 use std::io::{ErrorKind, Write};
 use std::path::{Path, PathBuf};
 
-/// `turing-<id>.png`, where the id is a hash of every input (see `id.rs`).
-pub fn file_name(id: &str) -> String {
-    format!("turing-{id}.png")
+/// `turing-<id>.<extension>`, where the id is a hash of every input (see `id.rs`).
+pub fn file_name(id: &str, extension: &str) -> String {
+    format!("turing-{id}.{extension}")
 }
 
 pub enum Saved {
@@ -33,14 +33,15 @@ pub fn check_directory(dir: &Path) -> Result<(), String> {
 ///
 /// If that name holds identical bytes, nothing is written. If it holds
 /// something else (for example an image made by an older version), the next
-/// free name `…-2.png`, `…-3.png`, … is used instead.
+/// free name `…-2.png`, `…-3.png`, … (same extension) is used instead.
 pub fn save(dir: &Path, name: &str, data: &[u8]) -> Result<Saved, String> {
-    let stem = name.strip_suffix(".png").unwrap_or(name);
+    let (stem, extension) = name.rsplit_once('.').unwrap_or((name, ""));
     // Write the complete file under a temporary name in the same directory,
     // then link it into place: linking is atomic and fails if the name exists,
     // so a partially written image never appears under the final name.
     let temp = dir.join(format!(".{stem}.{}.tmp", std::process::id()));
-    let result = write_temp(&temp, data).and_then(|()| link_unique(&temp, dir, stem, data));
+    let result =
+        write_temp(&temp, data).and_then(|()| link_unique(&temp, dir, stem, extension, data));
     let _ = fs::remove_file(&temp);
     result
 }
@@ -56,11 +57,17 @@ fn write_temp(temp: &Path, data: &[u8]) -> Result<(), String> {
         .map_err(|e| format!("cannot write {}: {e}", temp.display()))
 }
 
-fn link_unique(temp: &Path, dir: &Path, stem: &str, data: &[u8]) -> Result<Saved, String> {
+fn link_unique(
+    temp: &Path,
+    dir: &Path,
+    stem: &str,
+    extension: &str,
+    data: &[u8],
+) -> Result<Saved, String> {
     for n in 1u32.. {
         let path = match n {
-            1 => dir.join(format!("{stem}.png")),
-            _ => dir.join(format!("{stem}-{n}.png")),
+            1 => dir.join(format!("{stem}.{extension}")),
+            _ => dir.join(format!("{stem}-{n}.{extension}")),
         };
         match fs::hard_link(temp, &path) {
             Ok(()) => return Ok(Saved::Created(path)),
@@ -97,7 +104,7 @@ mod tests {
 
     #[test]
     fn name_is_the_id() {
-        assert_eq!(file_name("7f485ec22c6b"), "turing-7f485ec22c6b.png");
+        assert_eq!(file_name("7f485ec22c6b", "png"), "turing-7f485ec22c6b.png");
     }
 
     #[test]

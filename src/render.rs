@@ -127,6 +127,12 @@ pub fn mix(palette: Palette, t: f64) -> Color {
 /// Steps in the precomputed blend table.
 const BLEND_STEPS: usize = 4096;
 
+/// Blend amount between the two palette colors for a concentration `v`.
+/// The scale is fixed, so frames of an animation never change contrast.
+pub fn blend_amount(v: f32) -> f32 {
+    (v / 0.5).clamp(0.0, 1.0)
+}
+
 /// Map concentration to colors; a fixed scale avoids per-frame contrast changes.
 pub fn render(v: &[f32], palette: Palette) -> Vec<u8> {
     // The endpoints are the palette colors exactly; blends come from a table.
@@ -137,8 +143,7 @@ pub fn render(v: &[f32], palette: Palette) -> Vec<u8> {
     table[BLEND_STEPS - 1] = palette[1];
     let mut pixels = Vec::with_capacity(v.len() * 3);
     for &value in v {
-        let t = (value / 0.5).clamp(0.0, 1.0);
-        let index = (t * (BLEND_STEPS - 1) as f32).round() as usize;
+        let index = (blend_amount(value) * (BLEND_STEPS - 1) as f32).round() as usize;
         pixels.extend_from_slice(&table[index]);
     }
     pixels
@@ -159,56 +164,86 @@ fn area_weights(src: usize, dst: usize) -> Vec<Vec<(usize, f32)>> {
         .collect()
 }
 
-/// Shrink a square RGB image by averaging the source area under each pixel.
-pub fn downsample(pixels: &[u8], src: usize, dst: usize) -> Vec<u8> {
-    assert!(dst > 0 && dst <= src && pixels.len() == src * src * 3);
-    if src == dst {
-        return pixels.to_vec();
-    }
+/// Shrink a square image with `channels` values per pixel by averaging the
+/// source area under each output pixel; returns sums divided by the area.
+fn area_average(values: &[f32], channels: usize, src: usize, dst: usize) -> Vec<f32> {
+    assert!(dst > 0 && dst <= src && values.len() == src * src * channels);
     let weights = area_weights(src, dst);
-    // Rows first: src rows × dst columns, kept in floating point.
-    let mut rows = vec![0.0f32; src * dst * 3];
+    // Rows first: src rows × dst columns.
+    let mut rows = vec![0.0f32; src * dst * channels];
     for y in 0..src {
         for (x, columns) in weights.iter().enumerate() {
             for &(j, w) in columns {
-                for k in 0..3 {
-                    rows[(y * dst + x) * 3 + k] += w * f32::from(pixels[(y * src + j) * 3 + k]);
+                for k in 0..channels {
+                    rows[(y * dst + x) * channels + k] += w * values[(y * src + j) * channels + k];
                 }
             }
         }
     }
     let area = (src as f32 / dst as f32).powi(2);
-    let mut out = vec![0u8; dst * dst * 3];
+    let mut out = vec![0.0f32; dst * dst * channels];
     for (y, lines) in weights.iter().enumerate() {
         for x in 0..dst {
-            for k in 0..3 {
+            for k in 0..channels {
                 let sum: f32 = lines
                     .iter()
-                    .map(|&(j, w)| w * rows[(j * dst + x) * 3 + k])
+                    .map(|&(j, w)| w * rows[(j * dst + x) * channels + k])
                     .sum();
-                out[(y * dst + x) * 3 + k] = (sum / area).round().clamp(0.0, 255.0) as u8;
+                out[(y * dst + x) * channels + k] = sum / area;
             }
         }
     }
     out
 }
 
-/// Lay square RGB tiles out left to right, top to bottom, `columns` per row,
-/// separated by `gap` pixels. Gaps and unused cells are transparent, so the
-/// terminal background shows through. Returns RGBA pixels, width, and height.
-pub fn tile(tiles: &[Vec<u8>], size: usize, columns: usize, gap: usize) -> (Vec<u8>, usize, usize) {
-    assert!(!tiles.is_empty() && columns > 0);
-    assert!(tiles.iter().all(|t| t.len() == size * size * 3));
-    let columns = columns.min(tiles.len());
-    let rows = tiles.len().div_ceil(columns);
+/// Shrink a square RGB image by averaging the source area under each pixel.
+pub fn downsample(pixels: &[u8], src: usize, dst: usize) -> Vec<u8> {
+    if src == dst {
+        return pixels.to_vec();
+    }
+    let values: Vec<f32> = pixels.iter().map(|&c| f32::from(c)).collect();
+    area_average(&values, 3, src, dst)
+        .into_iter()
+        .map(|c| c.round().clamp(0.0, 255.0) as u8)
+        .collect()
+}
+
+/// Shrink a square field of single values the same way as `downsample`.
+pub fn downsample_values(values: &[f32], src: usize, dst: usize) -> Vec<f32> {
+    if src == dst {
+        return values.to_vec();
+    }
+    area_average(values, 1, src, dst)
+}
+
+/// Positions for `count` square tiles laid out left to right, top to bottom,
+/// `columns` per row, `gap` pixels apart. Returns width, height, and the
+/// top-left corner of each tile.
+pub fn layout(
+    count: usize,
+    size: usize,
+    columns: usize,
+    gap: usize,
+) -> (usize, usize, Vec<(usize, usize)>) {
+    assert!(count > 0 && columns > 0);
+    let columns = columns.min(count);
+    let rows = count.div_ceil(columns);
     let width = columns * size + (columns - 1) * gap;
     let height = rows * size + (rows - 1) * gap;
+    let corners = (0..count)
+        .map(|i| ((i % columns) * (size + gap), (i / columns) * (size + gap)))
+        .collect();
+    (width, height, corners)
+}
+
+/// Lay square RGB tiles out with `layout`. Gaps and unused cells are
+/// transparent, so the terminal background shows through. Returns RGBA
+/// pixels, width, and height.
+pub fn tile(tiles: &[Vec<u8>], size: usize, columns: usize, gap: usize) -> (Vec<u8>, usize, usize) {
+    assert!(tiles.iter().all(|t| t.len() == size * size * 3));
+    let (width, height, corners) = layout(tiles.len(), size, columns, gap);
     let mut out = vec![0u8; width * height * 4];
-    for (index, tile) in tiles.iter().enumerate() {
-        let (left, top) = (
-            (index % columns) * (size + gap),
-            (index / columns) * (size + gap),
-        );
+    for (tile, &(left, top)) in tiles.iter().zip(&corners) {
         for y in 0..size {
             for x in 0..size {
                 let src = &tile[(y * size + x) * 3..][..3];
