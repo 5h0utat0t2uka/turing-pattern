@@ -133,12 +133,13 @@ pub fn tile(tiles: &[Vec<u8>], size: usize, columns: usize, gap: usize) -> (Vec<
     (out, width, height)
 }
 
-/// Encode RGB (or RGBA when `alpha`) pixels as PNG.
+/// Encode RGB (or RGBA when `alpha`) pixels as PNG, with `(keyword, text)` chunks.
 pub fn encode_png(
     pixels: &[u8],
     width: usize,
     height: usize,
     alpha: bool,
+    text: &[(&str, String)],
 ) -> Result<Vec<u8>, String> {
     let too_large = |_| "image is too large for PNG".to_string();
     let (width, height) = (
@@ -155,6 +156,11 @@ pub fn encode_png(
     encoder.set_depth(png::BitDepth::Eight);
     // chafa decodes it immediately; speed matters more than file size.
     encoder.set_compression(png::Compression::Fastest);
+    for (keyword, value) in text {
+        encoder
+            .add_text_chunk(keyword.to_string(), value.clone())
+            .map_err(|e| e.to_string())?;
+    }
     let mut writer = encoder.write_header().map_err(|e| e.to_string())?;
     writer.write_image_data(pixels).map_err(|e| e.to_string())?;
     writer.finish().map_err(|e| e.to_string())?;
@@ -216,7 +222,14 @@ mod tests {
 
     #[test]
     fn png_has_signature_and_dimensions() {
-        let png = encode_png(&[0; 3 * 6], 3, 2, false).unwrap();
+        let png = encode_png(
+            &[0; 3 * 6],
+            3,
+            2,
+            false,
+            &[("Comment", "hello".to_string())],
+        )
+        .unwrap();
         assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
         let reader = png::Decoder::new(std::io::Cursor::new(png))
             .read_info()
@@ -226,8 +239,10 @@ mod tests {
             (info.width, info.height, info.color_type),
             (3, 2, png::ColorType::Rgb)
         );
+        assert_eq!(info.uncompressed_latin1_text[0].keyword, "Comment");
+        assert_eq!(info.uncompressed_latin1_text[0].text, "hello");
 
-        let png = encode_png(&[0; 4 * 4], 2, 2, true).unwrap();
+        let png = encode_png(&[0; 4 * 4], 2, 2, true, &[]).unwrap();
         let reader = png::Decoder::new(std::io::Cursor::new(png))
             .read_info()
             .unwrap();

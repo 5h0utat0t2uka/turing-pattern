@@ -1,6 +1,6 @@
 # turing-pattern
 
-Gray–Scott反応拡散モデルでチューリングパターンを生成し、[chafa](https://hpjansson.org/chafa/) でターミナルに表示するCLI  
+Gray–Scott反応拡散モデルでチューリングパターンを生成し、[chafa](https://hpjansson.org/chafa/) で表示・保存するCLI  
 
 ![demo](./img/ss.png)  
 
@@ -11,6 +11,7 @@ nix run . -- --size 256 --pattern worms    # サイズと模様を指定
 nix run . -- --seed 42                     # 同じ模様・配色を再現
 nix run . -- --text alice@example.com      # 文字列から決定（Identicon風）
 nix run . -- --all                         # 全種類を並べて表示
+nix run . -- --text alice --save dist      # 表示しつつ dist/ にPNGで保存
 ```
 
 | 引数 | 既定値 | 内容 |
@@ -21,8 +22,17 @@ nix run . -- --all                         # 全種類を並べて表示
 | `--steps` | `4000` | シミュレーションの更新回数 |
 | `--pattern` | seedで決定 | 模様の種類（下表） |
 | `--all` | なし | 全種類を同じseed・配色で横4列に並べて表示。`--pattern`とは併用不可 |
+| `--save [DIR]` | 保存しない | 表示に加えてPNGを保存。DIR省略時は現在のディレクトリ |
 
-seed・模様の種類・配色は標準エラー出力に表示される
+seed・模様の種類・配色・画像idは標準エラー出力に表示される
+
+### 画像idと保存
+- 画像ごとに12桁のidを持つ。生成方法のバージョン・模様（`--all`では`all`）・seed・サイズ・ステップ数をまとめたSHA-256の先頭12桁
+- 同じ`--text`と同じ設定なら同じid、どれかが違えば違うid。生成方法を変えたら`id.rs`のバージョンを上げ、以前のidと重ならないようにする
+- 保存時のファイル名は`turing-<id>.png`。同じ画像をもう一度保存しても複製は作らない（`Already saved`と表示）
+- PNGの中に元の値を記録する（例: `turing-pattern v1 pattern=maze seed=7 size=24 steps=30 id=8535ba4f27f3`）。`--text`の文字列は記録しない
+- 既存ファイルは上書きしない。同じ名前で中身が違う場合は`-2`・`-3`…を付けて保存
+- 書き込み途中のファイルが最終的な名前で残ることはない
 
 ### 文字列からの生成
 - 同じ文字列・`--size`・`--steps`であれば決定論的に同じ画像になる
@@ -68,6 +78,8 @@ nix flake check                         # ビルド時のテストと実行確�
 | `src/sim.rs` | シミュレーションと模様の種類 |
 | `src/render.rs` | 配色・描画・縮小・PNG変換 |
 | `src/text.rs` | 文字列からのseed |
+| `src/id.rs` | 画像id |
+| `src/save.rs` | 保存とファイル名 |
 | `src/lib.rs` | 計算から画像までの流れ |
 | `src/display.rs` | chafaでの表示 |
 | `src/rng.rs` | 乱数 |

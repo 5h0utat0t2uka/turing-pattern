@@ -6,6 +6,10 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Output};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use turing_pattern::id::ImageSpec;
+use turing_pattern::sim::Pattern;
+use turing_pattern::text::seed_from_text;
+
 const BIN: &str = env!("CARGO_BIN_EXE_turing-pattern");
 
 /// A fresh directory under Cargo's per-target temporary directory.
@@ -200,6 +204,179 @@ fn all_patterns_are_tiled_into_one_image() {
         png_size(&received),
         (4 * 256 + 3 * 16, 2 * 256 + 16, png::ColorType::Rgba)
     );
+}
+
+fn dir_names(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .unwrap()
+        .map(|e| e.unwrap().file_name().into_string().unwrap())
+        .collect();
+    names.sort();
+    names
+}
+
+/// File name for the given inputs, computed by the library.
+fn saved_name(pattern: &str, seed: u64, size: usize, steps: u32) -> String {
+    let id = ImageSpec {
+        pattern,
+        seed,
+        size,
+        steps,
+    }
+    .id();
+    format!("turing-{id}.png")
+}
+
+fn png_text(path: &Path) -> Vec<(String, String)> {
+    let reader = png::Decoder::new(std::io::BufReader::new(fs::File::open(path).unwrap()))
+        .read_info()
+        .unwrap();
+    reader
+        .info()
+        .uncompressed_latin1_text
+        .iter()
+        .map(|chunk| (chunk.keyword.clone(), chunk.text.clone()))
+        .collect()
+}
+
+#[test]
+fn save_writes_the_displayed_image_under_its_id() {
+    let (bin, received) = fake_chafa();
+    let out_dir = scratch("saved");
+    let dir = out_dir.to_str().unwrap();
+    let args = [
+        "--size",
+        "24",
+        "--steps",
+        "30",
+        "--seed",
+        "7",
+        "--pattern",
+        "maze",
+        "--save",
+        dir,
+    ];
+    let out = run(&args, &bin, &bin);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+
+    // Pinned: first 12 hex digits of the SHA-256 of the described inputs.
+    let name = "turing-8535ba4f27f3.png";
+    assert_eq!(name, saved_name("maze", 7, 24, 30));
+    assert_eq!(dir_names(&out_dir), [name]);
+    let saved = out_dir.join(name);
+    assert_eq!(fs::read(&saved).unwrap(), fs::read(&received).unwrap());
+    assert_eq!(png_size(&saved), (24, 24, png::ColorType::Rgb));
+    assert_eq!(
+        png_text(&saved),
+        [(
+            "turing-pattern".to_string(),
+            "turing-pattern v1 pattern=maze seed=7 size=24 steps=30 id=8535ba4f27f3".to_string()
+        )]
+    );
+    let log = String::from_utf8(out.stderr).unwrap();
+    assert!(log.contains("id=8535ba4f27f3"), "{log}");
+    assert!(
+        log.contains(&format!("Saved: {}", saved.display())),
+        "{log}"
+    );
+
+    // The same image again: no copy, and the existing file is reported.
+    let again = run(&args, &bin, &bin);
+    assert!(
+        String::from_utf8(again.stderr)
+            .unwrap()
+            .contains("Already saved")
+    );
+    assert_eq!(dir_names(&out_dir), [name]);
+
+    // Something else under that name is never overwritten.
+    fs::write(&saved, b"not this image").unwrap();
+    run(&args, &bin, &bin);
+    assert_eq!(fs::read(&saved).unwrap(), b"not this image");
+    assert_eq!(dir_names(&out_dir), ["turing-8535ba4f27f3-2.png", name]);
+}
+
+#[test]
+fn same_text_gives_the_same_id_and_other_inputs_do_not() {
+    let (bin, _) = fake_chafa();
+    let out_dir = scratch("ids");
+    let dir = out_dir.to_str().unwrap();
+    let save = |args: &[&str]| {
+        let mut all = vec!["--steps", "20", "--save", dir];
+        all.extend_from_slice(args);
+        let out = run(&all, &bin, &bin);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    };
+    save(&["--size", "16", "--text", "alice"]);
+    save(&["--size", "16", "--text", "alice"]); // same id: no new file
+    save(&["--size", "16", "--text", "bob"]);
+    save(&["--size", "17", "--text", "alice"]);
+    save(&["--size", "16", "--text", "alice", "--pattern", "loops"]);
+    save(&["--size", "16", "--text", "alice", "--all"]);
+    let alice = seed_from_text("alice");
+    let alice_pattern = Pattern::random(alice).name();
+    let mut expected = vec![
+        saved_name(alice_pattern, alice, 16, 20),
+        saved_name(
+            Pattern::random(seed_from_text("bob")).name(),
+            seed_from_text("bob"),
+            16,
+            20,
+        ),
+        saved_name(alice_pattern, alice, 17, 20),
+        saved_name("loops", alice, 16, 20),
+        saved_name("all", alice, 16, 20),
+    ];
+    expected.sort();
+    expected.dedup(); // if alice's own pattern happens to be loops
+    assert_eq!(dir_names(&out_dir), expected);
+}
+
+#[test]
+fn save_without_directory_uses_the_working_directory() {
+    let (bin, _) = fake_chafa();
+    let cwd = scratch("cwd");
+    let args = [
+        "--size",
+        "8",
+        "--steps",
+        "1",
+        "--seed",
+        "3",
+        "--pattern",
+        "spots",
+        "--save",
+    ];
+    let out = run(&args, &bin, &cwd);
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    assert_eq!(dir_names(&cwd), [saved_name("spots", 3, 8, 1)]);
+}
+
+#[test]
+fn unusable_save_directory_is_reported_before_simulating() {
+    let (bin, _) = fake_chafa();
+    let missing = scratch("parent").join("missing");
+    let out = run(
+        &["--size", "8", "--save", missing.to_str().unwrap()],
+        &bin,
+        &bin,
+    );
+    assert_eq!(out.status.code(), Some(1));
+    let log = String::from_utf8(out.stderr).unwrap();
+    assert!(log.contains("cannot use directory"), "{log}");
+    assert!(!log.contains("Generating"), "{log}");
 }
 
 #[test]
