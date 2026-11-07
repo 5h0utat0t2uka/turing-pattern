@@ -3,9 +3,10 @@ use std::process::ExitCode;
 
 use clap::Parser;
 
-use turing_pattern::display;
-use turing_pattern::render::{encode_png, hex, random_palette, render};
-use turing_pattern::sim::{DEFAULT_STEPS, Grid, Pattern};
+use turing_pattern::render::{encode_png, hex, random_palette};
+use turing_pattern::sim::{DEFAULT_STEPS, Pattern};
+use turing_pattern::text::seed_from_text;
+use turing_pattern::{display, generate};
 
 /// Show a random Gray–Scott reaction-diffusion pattern in the terminal via chafa.
 #[derive(Parser)]
@@ -16,8 +17,12 @@ struct Args {
     size: u32,
 
     /// Random seed (0 to 2^64-1); generated when omitted
-    #[arg(long)]
+    #[arg(long, conflicts_with = "text")]
     seed: Option<u64>,
+
+    /// Derive the seed from text (NFC-normalized; case and spaces matter)
+    #[arg(long)]
+    text: Option<String>,
 
     /// Simulation update count
     #[arg(long, default_value_t = DEFAULT_STEPS, value_parser = clap::value_parser!(u32).range(1..))]
@@ -38,9 +43,10 @@ fn random_seed() -> Result<u64, String> {
 
 fn run(args: Args) -> Result<(), String> {
     let chafa = display::find_chafa()?;
-    let seed = match args.seed {
-        Some(seed) => seed,
-        None => random_seed()?,
+    let seed = match (args.seed, &args.text) {
+        (Some(seed), _) => seed,
+        (None, Some(text)) => seed_from_text(text),
+        (None, None) => random_seed()?,
     };
     let pattern = args.pattern.unwrap_or_else(|| Pattern::random(seed));
     let size = args.size as usize;
@@ -50,11 +56,10 @@ fn run(args: Args) -> Result<(), String> {
         pattern.name()
     );
 
-    let mut grid = Grid::new(size, seed)?;
-    grid.advance(args.steps, pattern)?;
     let palette = random_palette(seed);
+    let pixels = generate(size, seed, args.steps, pattern, palette)?;
     eprintln!("Colors: {} / {}", hex(palette[0]), hex(palette[1]));
-    let png = encode_png(&render(&grid.v, palette), size)?;
+    let png = encode_png(&pixels, size)?;
     display::show(chafa.as_os_str(), &png)
 }
 

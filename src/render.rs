@@ -56,6 +56,55 @@ pub fn render(v: &[f32], palette: Palette) -> Vec<u8> {
     pixels
 }
 
+/// Area-weighted column ranges: for each output index, the source indices
+/// it covers and how much of each (weights sum to `src / dst`).
+fn area_weights(src: usize, dst: usize) -> Vec<Vec<(usize, f32)>> {
+    let scale = src as f64 / dst as f64;
+    (0..dst)
+        .map(|i| {
+            let (start, end) = (i as f64 * scale, (i + 1) as f64 * scale);
+            (start.floor() as usize..(end.ceil() as usize).min(src))
+                .map(|j| (j, (end.min(j as f64 + 1.0) - start.max(j as f64)) as f32))
+                .filter(|&(_, w)| w > 0.0)
+                .collect()
+        })
+        .collect()
+}
+
+/// Shrink a square RGB image by averaging the source area under each pixel.
+pub fn downsample(pixels: &[u8], src: usize, dst: usize) -> Vec<u8> {
+    assert!(dst > 0 && dst <= src && pixels.len() == src * src * 3);
+    if src == dst {
+        return pixels.to_vec();
+    }
+    let weights = area_weights(src, dst);
+    // Rows first: src rows × dst columns, kept in floating point.
+    let mut rows = vec![0.0f32; src * dst * 3];
+    for y in 0..src {
+        for (x, columns) in weights.iter().enumerate() {
+            for &(j, w) in columns {
+                for k in 0..3 {
+                    rows[(y * dst + x) * 3 + k] += w * f32::from(pixels[(y * src + j) * 3 + k]);
+                }
+            }
+        }
+    }
+    let area = (src as f32 / dst as f32).powi(2);
+    let mut out = vec![0u8; dst * dst * 3];
+    for (y, lines) in weights.iter().enumerate() {
+        for x in 0..dst {
+            for k in 0..3 {
+                let sum: f32 = lines
+                    .iter()
+                    .map(|&(j, w)| w * rows[(j * dst + x) * 3 + k])
+                    .sum();
+                out[(y * dst + x) * 3 + k] = (sum / area).round().clamp(0.0, 255.0) as u8;
+            }
+        }
+    }
+    out
+}
+
 pub fn encode_png(pixels: &[u8], size: usize) -> Result<Vec<u8>, String> {
     let size = u32::try_from(size).map_err(|_| "size is too large for PNG".to_string())?;
     let mut out = Vec::new();
@@ -101,6 +150,26 @@ mod tests {
         assert_eq!(hsv_to_rgb(1.0 / 3.0, 1.0, 1.0), [0, 255, 0]);
         assert_eq!(hsv_to_rgb(2.0 / 3.0, 1.0, 1.0), [0, 0, 255]);
         assert_eq!(hsv_to_rgb(0.5, 0.0, 0.5), [128, 128, 128]);
+    }
+
+    #[test]
+    fn downsample_averages_covered_area() {
+        let image = |values: &[u8]| values.iter().flat_map(|&v| [v, v, v]).collect::<Vec<u8>>();
+        // Same size is unchanged.
+        let src = image(&[1, 2, 3, 4]);
+        assert_eq!(downsample(&src, 2, 2), src);
+        // 2×2 → 1×1 is the mean.
+        assert_eq!(downsample(&image(&[0, 100, 200, 100]), 2, 1), image(&[100]));
+        // 3×3 → 2×2 splits the middle row and column in half.
+        let src = image(&[0, 0, 0, 0, 0, 0, 0, 0, 180]);
+        // Bottom-right output covers 1.5×1.5 source pixels: 0.25 of 0 … 1.0 of 180.
+        assert_eq!(downsample(&src, 3, 2), image(&[0, 0, 0, 80]));
+        // A flat image stays flat for any ratio.
+        assert!(
+            downsample(&image(&[77; 64 * 64]), 64, 17)
+                .iter()
+                .all(|&v| v == 77)
+        );
     }
 
     #[test]

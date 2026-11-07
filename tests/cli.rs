@@ -136,6 +136,38 @@ fn chafa_failure_is_reported() {
 }
 
 #[test]
+fn text_gives_the_same_image_as_its_seed() {
+    let (bin, received) = fake_chafa();
+    let common = ["--size", "24", "--steps", "30"];
+    let image = |extra: &[&str]| {
+        let args: Vec<&str> = common.iter().chain(extra).copied().collect();
+        let out = run(&args, &bin, &bin);
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        (
+            String::from_utf8(out.stderr).unwrap(),
+            fs::read(&received).unwrap(),
+        )
+    };
+
+    let (log, from_text) = image(&["--text", "alice@example.com"]);
+    // The seed is reported, so `--seed` reproduces the same image.
+    assert!(log.contains("seed=15188035183127902847"), "{log}");
+    assert_eq!(from_text, image(&["--seed", "15188035183127902847"]).1);
+
+    // Canonically equivalent text ("が" composed vs decomposed) gives the same image.
+    assert_eq!(
+        image(&["--text", "\u{304C}"]).1,
+        image(&["--text", "\u{304B}\u{3099}"]).1
+    );
+    // Case matters.
+    assert_ne!(from_text, image(&["--text", "Alice@example.com"]).1);
+}
+
+#[test]
 fn invalid_arguments_are_rejected() {
     let (bin, _) = fake_chafa();
     let cases: &[&[&str]] = &[
@@ -149,6 +181,8 @@ fn invalid_arguments_are_rejected() {
         &["--siz", "32"],
         &["--output", "pattern.png"],
         &["--pattern", "unknown"],
+        &["--text", "a", "--seed", "1"],
+        &["--text"],
     ];
     for args in cases {
         let out = run(args, &bin, &bin);

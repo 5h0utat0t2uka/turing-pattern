@@ -18,15 +18,19 @@ pub enum Pattern {
     Spots,
     Holes,
     Worms,
+    Dashes,
+    Loops,
 }
 
 impl Pattern {
-    pub const ALL: [Pattern; 5] = [
+    pub const ALL: [Pattern; 7] = [
         Pattern::Coral,
         Pattern::Maze,
         Pattern::Spots,
         Pattern::Holes,
         Pattern::Worms,
+        Pattern::Dashes,
+        Pattern::Loops,
     ];
 
     pub fn name(self) -> &'static str {
@@ -36,6 +40,8 @@ impl Pattern {
             Pattern::Spots => "spots",
             Pattern::Holes => "holes",
             Pattern::Worms => "worms",
+            Pattern::Dashes => "dashes",
+            Pattern::Loops => "loops",
         }
     }
 
@@ -47,6 +53,8 @@ impl Pattern {
             Pattern::Spots => (0.0367, 0.0649),
             Pattern::Holes => (0.039, 0.058),
             Pattern::Worms => (0.058, 0.065),
+            Pattern::Dashes => (0.046, 0.065),
+            Pattern::Loops => (0.062, 0.061),
         }
     }
 
