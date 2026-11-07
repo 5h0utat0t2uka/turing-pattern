@@ -168,6 +168,41 @@ fn text_gives_the_same_image_as_its_seed() {
 }
 
 #[test]
+fn all_patterns_are_tiled_into_one_image() {
+    let (bin, received) = fake_chafa();
+    let cwd = scratch("cwd");
+    let out = run(
+        &["--all", "--size", "20", "--steps", "30", "--text", "a"],
+        &bin,
+        &cwd,
+    );
+    assert!(
+        out.status.success(),
+        "{}",
+        String::from_utf8_lossy(&out.stderr)
+    );
+    // 7 patterns, 4 per row, gaps of max(2, 20 / 16) = 2 pixels.
+    assert_eq!(
+        png_size(&received),
+        (4 * 20 + 3 * 2, 2 * 20 + 2, png::ColorType::Rgba)
+    );
+    let log = String::from_utf8(out.stderr).unwrap();
+    assert!(
+        log.contains("Order (left to right): coral maze spots holes / worms dashes loops"),
+        "{log}"
+    );
+    assert_eq!(fs::read_dir(&cwd).unwrap().count(), 0);
+
+    // Without --size each tile is 256 pixels, with 16-pixel gaps.
+    let out = run(&["--all", "--steps", "1"], &bin, &cwd);
+    assert!(out.status.success());
+    assert_eq!(
+        png_size(&received),
+        (4 * 256 + 3 * 16, 2 * 256 + 16, png::ColorType::Rgba)
+    );
+}
+
+#[test]
 fn invalid_arguments_are_rejected() {
     let (bin, _) = fake_chafa();
     let cases: &[&[&str]] = &[
@@ -183,6 +218,7 @@ fn invalid_arguments_are_rejected() {
         &["--pattern", "unknown"],
         &["--text", "a", "--seed", "1"],
         &["--text"],
+        &["--all", "--pattern", "worms"],
     ];
     for args in cases {
         let out = run(args, &bin, &bin);

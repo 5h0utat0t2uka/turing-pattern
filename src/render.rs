@@ -105,11 +105,53 @@ pub fn downsample(pixels: &[u8], src: usize, dst: usize) -> Vec<u8> {
     out
 }
 
-pub fn encode_png(pixels: &[u8], size: usize) -> Result<Vec<u8>, String> {
-    let size = u32::try_from(size).map_err(|_| "size is too large for PNG".to_string())?;
+/// Lay square RGB tiles out left to right, top to bottom, `columns` per row,
+/// separated by `gap` pixels. Gaps and unused cells are transparent, so the
+/// terminal background shows through. Returns RGBA pixels, width, and height.
+pub fn tile(tiles: &[Vec<u8>], size: usize, columns: usize, gap: usize) -> (Vec<u8>, usize, usize) {
+    assert!(!tiles.is_empty() && columns > 0);
+    assert!(tiles.iter().all(|t| t.len() == size * size * 3));
+    let columns = columns.min(tiles.len());
+    let rows = tiles.len().div_ceil(columns);
+    let width = columns * size + (columns - 1) * gap;
+    let height = rows * size + (rows - 1) * gap;
+    let mut out = vec![0u8; width * height * 4];
+    for (index, tile) in tiles.iter().enumerate() {
+        let (left, top) = (
+            (index % columns) * (size + gap),
+            (index / columns) * (size + gap),
+        );
+        for y in 0..size {
+            for x in 0..size {
+                let src = &tile[(y * size + x) * 3..][..3];
+                let dst = ((top + y) * width + left + x) * 4;
+                out[dst..dst + 3].copy_from_slice(src);
+                out[dst + 3] = 255;
+            }
+        }
+    }
+    (out, width, height)
+}
+
+/// Encode RGB (or RGBA when `alpha`) pixels as PNG.
+pub fn encode_png(
+    pixels: &[u8],
+    width: usize,
+    height: usize,
+    alpha: bool,
+) -> Result<Vec<u8>, String> {
+    let too_large = |_| "image is too large for PNG".to_string();
+    let (width, height) = (
+        u32::try_from(width).map_err(too_large)?,
+        u32::try_from(height).map_err(too_large)?,
+    );
     let mut out = Vec::new();
-    let mut encoder = png::Encoder::new(&mut out, size, size);
-    encoder.set_color(png::ColorType::Rgb);
+    let mut encoder = png::Encoder::new(&mut out, width, height);
+    encoder.set_color(if alpha {
+        png::ColorType::Rgba
+    } else {
+        png::ColorType::Rgb
+    });
     encoder.set_depth(png::BitDepth::Eight);
     // chafa decodes it immediately; speed matters more than file size.
     encoder.set_compression(png::Compression::Fastest);
@@ -174,10 +216,39 @@ mod tests {
 
     #[test]
     fn png_has_signature_and_dimensions() {
-        let png = encode_png(&[0; 3 * 4], 2).unwrap();
+        let png = encode_png(&[0; 3 * 6], 3, 2, false).unwrap();
         assert_eq!(&png[..8], b"\x89PNG\r\n\x1a\n");
-        let decoder = png::Decoder::new(std::io::Cursor::new(png));
-        let reader = decoder.read_info().unwrap();
-        assert_eq!((reader.info().width, reader.info().height), (2, 2));
+        let reader = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        let info = reader.info();
+        assert_eq!(
+            (info.width, info.height, info.color_type),
+            (3, 2, png::ColorType::Rgb)
+        );
+
+        let png = encode_png(&[0; 4 * 4], 2, 2, true).unwrap();
+        let reader = png::Decoder::new(std::io::Cursor::new(png))
+            .read_info()
+            .unwrap();
+        assert_eq!(reader.info().color_type, png::ColorType::Rgba);
+    }
+
+    #[test]
+    fn tiles_are_laid_out_with_transparent_gaps() {
+        // Three 2×2 tiles of values 1, 2, 3; two per row; gap of 1.
+        let tiles: Vec<Vec<u8>> = (1..=3).map(|v| vec![v; 2 * 2 * 3]).collect();
+        let (pixels, width, height) = tile(&tiles, 2, 2, 1);
+        assert_eq!((width, height), (5, 5));
+        let at = |x: usize, y: usize| &pixels[(y * width + x) * 4..][..4];
+        assert_eq!(at(0, 0), [1, 1, 1, 255]);
+        assert_eq!(at(1, 1), [1, 1, 1, 255]);
+        assert_eq!(at(2, 0), [0, 0, 0, 0]); // gap column
+        assert_eq!(at(3, 1), [2, 2, 2, 255]);
+        assert_eq!(at(0, 2), [0, 0, 0, 0]); // gap row
+        assert_eq!(at(1, 4), [3, 3, 3, 255]);
+        assert_eq!(at(4, 4), [0, 0, 0, 0]); // unused cell
+        // Fewer tiles than columns: a single row, no trailing gap.
+        assert_eq!(tile(&tiles[..1], 2, 4, 1).1, 2);
     }
 }

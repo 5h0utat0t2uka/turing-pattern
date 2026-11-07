@@ -28,10 +28,35 @@ pub fn generate(
     Ok(downsample(&render(&grid.v, palette), simulated, size))
 }
 
+/// Generate every pattern type from the same seed (same colors and initial
+/// layout), in `Pattern::ALL` order. Patterns are computed concurrently.
+pub fn generate_all(
+    size: usize,
+    seed: u64,
+    steps: u32,
+    palette: Palette,
+) -> Result<Vec<Vec<u8>>, String> {
+    use rayon::prelude::*;
+    Pattern::ALL
+        .par_iter()
+        .map(|&pattern| generate(size, seed, steps, pattern, palette))
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::render::random_palette;
+
+    #[test]
+    fn generate_all_matches_individual_runs_in_order() {
+        let palette = random_palette(5);
+        let all = generate_all(20, 5, 200, palette).unwrap();
+        assert_eq!(all.len(), Pattern::ALL.len());
+        for (pixels, &pattern) in all.iter().zip(&Pattern::ALL) {
+            assert_eq!(*pixels, generate(20, 5, 200, pattern, palette).unwrap());
+        }
+    }
 
     #[test]
     fn small_images_always_show_a_pattern() {
