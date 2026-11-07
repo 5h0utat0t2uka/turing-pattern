@@ -1,8 +1,9 @@
 //! Deterministic seeds from text, for Identicon-like use.
 //!
 //! The same text always gives the same seed, and therefore the same pattern,
-//! colors, and shape. Changing this function, or anything the seed feeds into,
-//! changes every image derived from text, so the prefix carries a version.
+//! colors, and shape. The prefix carries a version for this text-to-seed step
+//! only; changes to what the seed feeds into bump `GENERATOR_VERSION` in
+//! `id.rs` instead.
 
 use sha2::{Digest, Sha256};
 use unicode_normalization::UnicodeNormalization;

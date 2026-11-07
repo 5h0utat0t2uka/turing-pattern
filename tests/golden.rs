@@ -2,7 +2,8 @@
 //!
 //! These hashes cover the whole pipeline: text → seed → pattern choice,
 //! initial state, simulation, palette, and pixels. If one changes on purpose,
-//! bump the version prefix in `src/text.rs` and update the values here.
+//! bump `GENERATOR_VERSION` in `src/id.rs` and update the values here. (The
+//! prefix in `src/text.rs` changes only if the text-to-seed step changes.)
 
 use sha2::{Digest, Sha256};
 
@@ -32,7 +33,7 @@ fn downsampled_image_is_pinned() {
     // Below 64 the grid is simulated at 64 and shrunk.
     assert_eq!(
         pixel_hash("alice@example.com", 48, 500),
-        "699d6a338bad6bcfa4bc4dbc3e12313a1c6d831a24fb869b6fcd90e3db5fadc9"
+        "3197bf1eead29541b427fbeb96087c0653ba19b8a8920002e61ad22b5837afb3"
     );
 }
 
@@ -40,7 +41,7 @@ fn downsampled_image_is_pinned() {
 fn single_threaded_image_is_pinned() {
     assert_eq!(
         pixel_hash("alice@example.com", 96, 300),
-        "1e3d56f721dc34e8ead025607fee6cf5dd93773b17347f9283fc6f3cf869dd4b"
+        "ba0fab45eb04b87124bdc95c9735a46fd8014b000b942d9249a668d1545d8bee"
     );
 }
 
@@ -49,6 +50,6 @@ fn parallel_image_is_pinned() {
     // 256 and above use the multi-threaded path.
     assert_eq!(
         pixel_hash("チューリング", 256, 100),
-        "13c4ca4eb592eff1ddc98b07bea8f6e211a0e83297590b58ae3287630f83a50d"
+        "7d7cf4a4824aeeff2a6229f7a1a98e80e403aa1edd7a73b5c58b0ca38b4bc13c"
     );
 }

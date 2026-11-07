@@ -97,7 +97,7 @@ mod tests {
 
     #[test]
     fn name_is_the_id() {
-        assert_eq!(file_name("8535ba4f27f3"), "turing-8535ba4f27f3.png");
+        assert_eq!(file_name("7f485ec22c6b"), "turing-7f485ec22c6b.png");
     }
 
     #[test]

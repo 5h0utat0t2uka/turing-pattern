@@ -264,7 +264,7 @@ fn save_writes_the_displayed_image_under_its_id() {
     );
 
     // Pinned: first 12 hex digits of the SHA-256 of the described inputs.
-    let name = "turing-8535ba4f27f3.png";
+    let name = "turing-7f485ec22c6b.png";
     assert_eq!(name, saved_name("maze", 7, 24, 30));
     assert_eq!(dir_names(&out_dir), [name]);
     let saved = out_dir.join(name);
@@ -274,11 +274,11 @@ fn save_writes_the_displayed_image_under_its_id() {
         png_text(&saved),
         [(
             "turing-pattern".to_string(),
-            "turing-pattern v1 pattern=maze seed=7 size=24 steps=30 id=8535ba4f27f3".to_string()
+            "turing-pattern v2 pattern=maze seed=7 size=24 steps=30 id=7f485ec22c6b".to_string()
         )]
     );
     let log = String::from_utf8(out.stderr).unwrap();
-    assert!(log.contains("id=8535ba4f27f3"), "{log}");
+    assert!(log.contains("id=7f485ec22c6b"), "{log}");
     assert!(
         log.contains(&format!("Saved: {}", saved.display())),
         "{log}"
@@ -297,7 +297,7 @@ fn save_writes_the_displayed_image_under_its_id() {
     fs::write(&saved, b"not this image").unwrap();
     run(&args, &bin, &bin);
     assert_eq!(fs::read(&saved).unwrap(), b"not this image");
-    assert_eq!(dir_names(&out_dir), ["turing-8535ba4f27f3-2.png", name]);
+    assert_eq!(dir_names(&out_dir), ["turing-7f485ec22c6b-2.png", name]);
 }
 
 #[test]

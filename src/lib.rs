@@ -67,16 +67,28 @@ mod tests {
                 for seed in 0..8 {
                     let pixels = generate(size, seed, 4000, pattern, random_palette(seed)).unwrap();
                     assert_eq!(pixels.len(), size * size * 3);
-                    // The two palette colors differ a lot in brightness, so a
-                    // visible pattern means a wide brightness range.
-                    let brightness: Vec<u32> = pixels
+                    // Each pixel is a blend of the two palette colors. A faded,
+                    // flat image spans almost no range of blend amounts; the
+                    // lowest measured for a visible pattern is about 0.33
+                    // (holes, which has low contrast, shrunk to 8 pixels).
+                    let palette = random_palette(seed).map(|c| c.map(f64::from));
+                    let axis: Vec<f64> = (0..3).map(|k| palette[1][k] - palette[0][k]).collect();
+                    let norm: f64 = axis.iter().map(|d| d * d).sum();
+                    let amounts: Vec<f64> = pixels
                         .chunks(3)
-                        .map(|p| p.iter().map(|&c| u32::from(c)).sum())
+                        .map(|p| {
+                            (0..3)
+                                .map(|k| (f64::from(p[k]) - palette[0][k]) * axis[k])
+                                .sum::<f64>()
+                                / norm
+                        })
                         .collect();
-                    let range = brightness.iter().max().unwrap() - brightness.iter().min().unwrap();
+                    let max = amounts.iter().copied().fold(f64::MIN, f64::max);
+                    let min = amounts.iter().copied().fold(f64::MAX, f64::min);
                     assert!(
-                        range > 90,
-                        "{pattern:?} size={size} seed={seed} range={range}"
+                        max - min > 0.25,
+                        "{pattern:?} size={size} seed={seed} range={:.2}",
+                        max - min
                     );
                 }
             }

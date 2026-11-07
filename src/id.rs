@@ -8,7 +8,9 @@ use sha2::{Digest, Sha256};
 
 /// Bump when the same inputs would produce different pixels (random numbers,
 /// initial state, simulation, palette, rendering, resizing, or layout).
-pub const GENERATOR_VERSION: u32 = 1;
+/// v2: vivid two-hue palette blended in OKLCh, instead of one vivid and one
+/// near-black color blended in RGB.
+pub const GENERATOR_VERSION: u32 = 2;
 
 /// Hex digits in an id (48 bits).
 pub const ID_LEN: usize = 12;
@@ -57,18 +59,18 @@ mod tests {
     fn describe_lists_every_input() {
         assert_eq!(
             spec("maze", 7, 24, 30).describe(),
-            "turing-pattern v1 pattern=maze seed=7 size=24 steps=30"
+            "turing-pattern v2 pattern=maze seed=7 size=24 steps=30"
         );
     }
 
     #[test]
     fn id_is_pinned() {
         // Independently: first 12 hex digits of
-        // `printf 'turing-pattern v1 pattern=maze seed=7 size=24 steps=30' | shasum -a 256`.
+        // `printf 'turing-pattern v2 pattern=maze seed=7 size=24 steps=30' | shasum -a 256`.
         assert_eq!(spec("maze", 7, 24, 30).id(), PINNED);
     }
 
-    const PINNED: &str = "8535ba4f27f3";
+    const PINNED: &str = "7f485ec22c6b";
 
     #[test]
     fn every_input_changes_the_id() {
