@@ -1,0 +1,39 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: nix flake check (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        # x86_64-linux and aarch64-darwin: the pinned-image tests in
+        # tests/golden.rs also confirm both CPUs produce identical images.
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: cachix/install-nix-action@75c75c31ebece974e48ebc36b4ad125bd97bd97b # v31.11.3
+
+      # Builds the package (running cargo test: unit, exactness, CLI, and
+      # pinned-image tests) and a smoke run through the real chafa.
+      - run: nix flake check --print-build-logs
+
+      - name: Lint
+        run: nix develop --command sh -c 'cargo fmt --check && cargo clippy --release --all-targets -- -D warnings'

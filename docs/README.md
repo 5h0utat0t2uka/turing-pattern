@@ -1,8 +1,8 @@
 # turing-pattern
 
-Gray–Scott反応拡散モデルでチューリングパターンを生成し、[chafa](https://hpjansson.org/chafa/) で表示・保存するCLI  
+Gray–Scott反応拡散モデルでチューリングパターンを生成して [chafa](https://hpjansson.org/chafa/) で表示・保存するCLI  
 
-![demo](./img/ss.png)  
+![demo](./ss.png)  
 
 ## 使い方
 ```sh

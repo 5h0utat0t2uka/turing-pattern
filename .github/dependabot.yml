@@ -1,0 +1,67 @@
+version: 2
+
+updates:
+  - package-ecosystem: "nix"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "04:00"
+      timezone: "Asia/Tokyo"
+    cooldown:
+      default-days: 7
+    groups:
+      nix-inputs:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "nix"
+    commit-message:
+      prefix: "chore(nix)"
+    assignees:
+      - "5h0utat0t2uka"
+
+  - package-ecosystem: "cargo"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "04:00"
+      timezone: "Asia/Tokyo"
+    cooldown:
+      default-days: 7
+    groups:
+      # Major updates may need code changes, so they get their own pull requests.
+      cargo-minor-patch:
+        update-types:
+          - "minor"
+          - "patch"
+    labels:
+      - "dependencies"
+      - "rust"
+    commit-message:
+      prefix: "chore(cargo)"
+    assignees:
+      - "5h0utat0t2uka"
+
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+      day: "sunday"
+      time: "04:00"
+      timezone: "Asia/Tokyo"
+    cooldown:
+      default-days: 7
+    groups:
+      github-actions:
+        patterns:
+          - "*"
+    labels:
+      - "dependencies"
+      - "github-actions"
+    commit-message:
+      prefix: "chore(ci)"
+    assignees:
+      - "5h0utat0t2uka"
