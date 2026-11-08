@@ -1,22 +1,20 @@
 # turing-pattern
 
-Gray–Scott反応拡散モデルのチューリングパターンを生成して [chafa](https://hpjansson.org/chafa/) で表示・保存する  
+人間の指紋の隆線の形成や、動物の斑点・縞模様の形成などに関するチューリングの理論に基づき、反応拡散モデル(Gray–Scott)のシミュレーションで決定論的な模様を生成して [Identicon](https://en.wikipedia.org/wiki/Identicon) のように使える画像を [chafa](https://hpjansson.org/chafa/) で表示する  
 
 <p>
-  <img src="./turing-1b932679a0a9.gif" alt="demo" width="256"><img src="./turing-c88d263226fa.gif" alt="demo" width="256"><img src="./turing-4ff703ac342d.gif" alt="demo" width="256"><img src="./turing-ba31de6d27e8.gif" alt="demo" width="256">
+  <img src="./turing-1b932679a0a9.gif" alt="demo" width="256"><img src="./turing-c88d263226fa.gif" alt="demo" width="256"><img src="./turing-4ff703ac342d.gif" alt="demo" width="256"><img src="./turing-ba31de6d27e8.gif" alt="demo" width="256"><img src="./turing-064172bc257d.gif" alt="demo" width="256"><img src="./turing-39988d1bfcd5.gif" alt="demo" width="256">
 </p>
-
-<!--![demo](./ss.png)  -->
 
 ## 使い方
 ```sh
 nix run .                                  # 512×512 サイズをすべてランダム
-nix run . -- --size 256 --pattern worms    # サイズと模様を指定
-nix run . -- --seed 42                     # 同じ模様・配色を再現
-nix run . -- --text alice@example.com      # 文字列から決定（Identicon風）
 nix run . -- --all                         # 全種類を並べて表示
 nix run . -- --animate                     # 模様ができていく様子をアニメーションGIFで再生（Ctrl+Cで終了）
+nix run . -- --seed 42                     # 同じ模様・配色を再現
+nix run . -- --text alice@example.com      # 文字列から決定（Identicon風）
 nix run . -- --text alice --save dist      # 表示しつつ dist/ にPNGで保存
+nix run . -- --size 256 --pattern worms    # サイズと模様を指定
 ```
 
 | 引数 | 既定値 | 内容 |
@@ -121,7 +119,10 @@ nix flake check                        # ビルド時のテストと実行確認
 | 2048 | 4.4秒 |
 
 ## 参考資料
+- [チューリング・パターン](https://ja.wikipedia.org/wiki/チューリング・パターン)
+- [反応拡散系](https://ja.wikipedia.org/wiki/反応拡散系)
 - [Gray–Scottモデル — MIT CSAIL](https://groups.csail.mit.edu/mac/projects/amorphous/GrayScott/)
+- [Reaction-Diffusion by the Gray-Scott Model](https://mrob.com/pub/comp/xmorphia/)
 - [Reaction-Diffusion Tutorial — Karl Sims](https://karlsims.com/rd.html)
 - [xoshiro / xorshift generators](https://prng.di.unimi.it/)
 - [Rayon](https://docs.rs/rayon)
